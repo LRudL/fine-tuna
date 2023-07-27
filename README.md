@@ -7,6 +7,6 @@ Fine-tuning codebase (currently configured for OpenAI models).
 It is assumed that you have a `.env` file in the root directory in the following format:
 
 ```
-OPENAI_API_KEY = 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
+OPENAI_API_KEY = sk-??????????????
 ```
 
