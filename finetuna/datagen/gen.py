@@ -1,11 +1,11 @@
 import dill
 from jinja2 import Environment, StrictUndefined, Undefined
-import json
 import openai
+import os
 import random
 from typing import Callable, Any, Union
 
-from finetuna.utils import files_wo_suffix
+from finetuna.utils import files_wo_suffix, load_from_jsonl, write_to_jsonl
 from finetuna.consts import OPENAI_API_KEY, DATASETS_PATH, DATA_GENERATORS_PATH
 
 openai.api_key = OPENAI_API_KEY
@@ -52,37 +52,52 @@ class DataGenerator:
             latent_state_gen_fn,
             name
         )
-
+     
     @staticmethod
-    def get_dataset_path(name) -> str:
-        return f"{DATASETS_PATH}/{name}.jsonl"
-    def dataset_path(self) -> str:
-        return DataGenerator.get_dataset_path(self.name)
+    def get_dataset_path(name, dir=None) -> str:
+        path = f"{DATASETS_PATH}/{name}.jsonl"
+        if dir is not None:
+            path = f"{dir}/{path}"
+        return path
+    def dataset_path(self, dir=None) -> str:
+        return DataGenerator.get_dataset_path(self.name, dir=dir)
     
     @staticmethod
-    def get_data_generator_path(name) -> str:
-        return f"{DATA_GENERATORS_PATH}/{name}.pkl"
-    def data_generator_path(self) -> str:
-        return DataGenerator.get_data_generator_path(self.name)
+    def get_data_generator_path(name, dir=None) -> str:
+        path = f"{DATA_GENERATORS_PATH}/{name}.pkl"
+        if dir is not None:
+            path = f"{dir}/{path}"
+        return path
+    def data_generator_path(self, dir=None) -> str:
+        return DataGenerator.get_data_generator_path(self.name, dir=dir)
     
     @staticmethod
-    def load(name : str) -> 'DataGenerator':
-        with open(DataGenerator.get_data_generator_path(name), "rb") as f:
+    def load(name : str, dir=None) -> 'DataGenerator':
+        with open(DataGenerator.get_data_generator_path(name, dir=dir), "rb") as f:
             data_generator = dill.load(f)
-        with open(DataGenerator.get_dataset_path(name), "r") as f:
-            dataset = []
-            for line in f:
-                dataset.append(json.loads(line))
-            data_generator.dataset = dataset
+        dataset = load_from_jsonl(DataGenerator.get_dataset_path(name, dir=dir))
+        data_generator.dataset = dataset
         return data_generator
     
-    def save(self, warn_if_exists=False):
+    def save(self, warn_if_exists=False, custom_dir=None):
         if warn_if_exists:
             assert not DataGenerator.name_exists(self.name), f"Dataset {self.name} already exists. Please choose a different name, or set warn_if_exists=True."
-        with open(self.data_generator_path(), "wb") as f:
+        # consts.py already makes these for the default case,
+        # but not if a custom_dir is provided (useful for testing)
+        os.makedirs(
+            os.path.dirname(
+                self.data_generator_path(custom_dir), 
+            ), exist_ok=True
+        )
+        os.makedirs(
+            os.path.dirname(
+                self.dataset_path(custom_dir)
+            ), exist_ok=True
+        )
+        with open(self.data_generator_path(custom_dir), "wb") as f:
             print(self)
             dill.dump(self, f)
-        self.save_data_to_jsonl(self.dataset_path())
+        self.save_data_to_jsonl(self.dataset_path(custom_dir))
         print(f"Wrote dataset {self.name} to {self.dataset_path()}. You can load it with DataGenerator.load('{self.name}').")
     
     def generate(self, n=10):
@@ -105,9 +120,7 @@ class DataGenerator:
         Save the generated dataset to a JSONL file.
         NOTE: in general, you should use the .save() method instead of this method.
         """
-        with open(filepath, "w") as f:
-            for item in self.dataset:
-                f.write(json.dumps(item) + "\n")
+        write_to_jsonl(self.dataset, filepath)
     
     def print_sample(self, n=10):
         """
@@ -124,6 +137,39 @@ class DataGenerator:
             completion_i = self.dataset[i]["completion"]
             print(bold + prompt_i + reset + completion_i)
         print(boundary)
+
+def raise_not_implemented_error(s):
+    raise NotImplementedError(s)
+
+class DataHolder(DataGenerator):
+    """
+    A DataGenerator that does not assume ability to
+    generate additional datapoints (but can support it).
+    Useful for loading existing datsets that weren't generated
+    by a DataGenerator.
+    """
+    def __init__(
+        self, 
+        jsonl_path_or_dataset,
+        prompt_gen_fn : Callable[[LatentState], str] = lambda ls : raise_not_implemented_error("DataHolder was not given a prompt_gen_fn"),
+        completion_gen_fn : Callable[[str, LatentState], str] = lambda prompt, ls : raise_not_implemented_error("DataHolder was not given a completion_gen_fn"),
+        latent_state_gen_fn : Callable[[], LatentState] = lambda : raise_not_implemented_error("DataHolder was not given a latent_state_gen_fn"),
+        name : str = "unnamed_dataset"
+    ):
+        super().__init__(
+            prompt_gen_fn,
+            completion_gen_fn,
+            latent_state_gen_fn,
+            name=name
+        )
+
+        if isinstance(jsonl_path_or_dataset, str):
+            self.dataset = load_from_jsonl(jsonl_path_or_dataset)
+        else:
+            assert isinstance(jsonl_path_or_dataset, list), "jsonl_path_or_dataset must be a path to a JSONL file or a list of data points"
+            assert jsonl_path_or_dataset[0].keys() == {"prompt", "completion"}, "jsonl_path_or_dataset should consist of {'prompt': ..., 'completion': ...} dicts"
+            self.dataset = jsonl_path_or_dataset
+        self.name = "unnamed_dataset"
 
 def template_filler_fn(
     template : str,
@@ -205,8 +251,8 @@ def prompt_gpt_for_completion_fn(
             **completion_args
         )
         
-        completion_txt : str = completion.choices[0]["message"]["content"]
-
+        completion_txt : str = completion.choices[0]["message"]["content"] # type: ignore
+        
         return completion_txt
     return get_completion
         
