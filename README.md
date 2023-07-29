@@ -10,3 +10,6 @@ It is assumed that you have a `.env` file in the root directory in the following
 OPENAI_API_KEY = sk-??????????????
 ```
 
+## Running tests
+
+Run `python -m pytest`.
