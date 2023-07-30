@@ -7,6 +7,7 @@ from typing import Callable, Any, Union
 
 from finetuna.utils import files_wo_suffix, load_from_jsonl, write_to_jsonl
 from finetuna.consts import OPENAI_API_KEY, DATASETS_PATH, DATA_GENERATORS_PATH
+from finetuna.completers import Completer
 
 openai.api_key = OPENAI_API_KEY
 
@@ -210,12 +211,9 @@ def template_filler_fn(
         return jinja_template.render(**random_values)
     return random_template
 
-def prompt_gpt_for_completion_fn(
+def completion_maker_fn(
     prompt_template : str,
-    gpt_model = "gpt-3.5-turbo",
-    gpt_extra_messages = [],
-    # e.g. if you want to set a role, pass in [{"role": "system", "content": "..."}]
-    completion_args = {"stop": ["\n"], "max_tokens": 200}
+    completer : Completer
 ):
     def get_completion(
         prompt_in_dataset : str,
@@ -223,7 +221,7 @@ def prompt_gpt_for_completion_fn(
     ) -> str:
         """
         special_vars is for the latent state.
-        prompt_in_dataset is called that to distinguish it from the prompt template used to construct the completion for the dataset
+        `prompt_in_dataset` is called that to distinguish it from the prompt template used to construct the completion for the dataset
         """
         env = Environment(
             undefined=Undefined,
@@ -231,8 +229,11 @@ def prompt_gpt_for_completion_fn(
         jinja_template = env.from_string(prompt_template)
          
         variables = {
-            "__PROMPT__": prompt_in_dataset
+            "prompt": prompt_in_dataset
         }
+
+        if "prompt" in special_vars.keys():
+            raise Exception("You cannot use 'prompt' as a latent state property name, because it is already used to store the prompt.")
         
         # overwrite with any special values:
         variables.update(special_vars)
@@ -240,19 +241,8 @@ def prompt_gpt_for_completion_fn(
         gpt_prompt = jinja_template.render(**variables)
 
         # now we get the completion:
-        completion = openai.ChatCompletion.create(
-            model=gpt_model,
-            messages = gpt_extra_messages + [
-                {
-                    "role": "user",
-                    "content": gpt_prompt
-                }
-            ],
-            **completion_args
-        )
+        completion_text : str = completer(gpt_prompt)
         
-        completion_txt : str = completion.choices[0]["message"]["content"] # type: ignore
-        
-        return completion_txt
+        return completion_text
     return get_completion
         

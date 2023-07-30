@@ -4,8 +4,12 @@ import tempfile
 import random
 import shutil
 
-from finetuna.datagen.gen import DataGenerator, DataHolder, template_filler_fn
+import finetuna
+from finetuna.datagen.gen import DataGenerator, DataHolder, template_filler_fn, completion_maker_fn
+from finetuna.completers import DummyCompleter
 from finetuna.utils import write_to_jsonl
+
+finetuna.completers.BLOCK_API_CALLS = True
 
 class Test_template_filler_fn:
     def test_template_filler_fn(self):
@@ -21,6 +25,16 @@ class Test_template_filler_fn:
         age_list = [1]
         f = template_filler_fn(template, name=name_list, age=age_list)
         assert f({"age": 2}) == "My name is Bob the AGI and I am 2 years old." # type: ignore
+
+class Test_completion_maker_fn:
+    def test_completion_maker_fn(self):
+        completer = DummyCompleter(
+            lambda filled_in_prompt : f"Echoing: {filled_in_prompt}."
+        )
+        prompt_template = "Hello, you {{adjective}} said {{prompt}}"
+        f = completion_maker_fn(prompt_template, completer)
+        assert f("hi", {"adjective": "cheerfully"}) == "Echoing: Hello, you cheerfully said hi." # type: ignore
+        
 
 @pytest.fixture
 def temp_dir():
