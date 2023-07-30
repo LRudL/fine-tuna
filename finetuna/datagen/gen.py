@@ -4,8 +4,9 @@ import openai
 import os
 import random
 from typing import Callable, Any, Union
+from collections import Counter
 
-from finetuna.utils import files_wo_suffix, load_from_jsonl, write_to_jsonl
+from finetuna.utils import files_wo_suffix, load_from_jsonl, write_to_jsonl, random_fn_multiplexor
 from finetuna.consts import OPENAI_API_KEY, DATASETS_PATH, DATA_GENERATORS_PATH
 from finetuna.completers import Completer
 
@@ -78,6 +79,8 @@ class DataGenerator:
             data_generator = dill.load(f)
         dataset = load_from_jsonl(DataGenerator.get_dataset_path(name, dir=dir))
         data_generator.dataset = dataset
+        
+        assert len(data_generator.dataset) == len(data_generator.latent_states), "Dataset and latent states must be the same length."
         return data_generator
     
     def save(self, warn_if_exists=False, custom_dir=None):
@@ -138,7 +141,29 @@ class DataGenerator:
             completion_i = self.dataset[i]["completion"]
             print(bold + prompt_i + reset + completion_i)
         print(boundary)
+    
+    def reset(self):
+        self.dataset = []
+        self.latent_states = []
+    
+    def add_item(self, prompt, completion, latent_state = None):
+        self.dataset.append({
+            "prompt": prompt,
+            "completion": completion
+        })
+        self.latent_states.append(latent_state)
+        assert len(self.dataset) == len(self.latent_states), "Error that really shouldn't happen in DataGenerator.add_item: dataset and latent states must be the same length."
+    
+    def count_by(self, latent_state_prop):
+        """
+        Returns a dictionary of {latent_state_prop_value: count} for the given latent_state_prop.
+        """
+        vals = [ls[latent_state_prop] for ls in self.latent_states]
+        return Counter(vals)
 
+        
+
+    
 def raise_not_implemented_error(s):
     raise NotImplementedError(s)
 
@@ -152,6 +177,7 @@ class DataHolder(DataGenerator):
     def __init__(
         self, 
         jsonl_path_or_dataset,
+        latent_states = None,
         prompt_gen_fn : Callable[[LatentState], str] = lambda ls : raise_not_implemented_error("DataHolder was not given a prompt_gen_fn"),
         completion_gen_fn : Callable[[str, LatentState], str] = lambda prompt, ls : raise_not_implemented_error("DataHolder was not given a completion_gen_fn"),
         latent_state_gen_fn : Callable[[], LatentState] = lambda : raise_not_implemented_error("DataHolder was not given a latent_state_gen_fn"),
@@ -163,14 +189,19 @@ class DataHolder(DataGenerator):
             latent_state_gen_fn,
             name=name
         )
-
         if isinstance(jsonl_path_or_dataset, str):
             self.dataset = load_from_jsonl(jsonl_path_or_dataset)
         else:
             assert isinstance(jsonl_path_or_dataset, list), "jsonl_path_or_dataset must be a path to a JSONL file or a list of data points"
             assert jsonl_path_or_dataset[0].keys() == {"prompt", "completion"}, "jsonl_path_or_dataset should consist of {'prompt': ..., 'completion': ...} dicts"
             self.dataset = jsonl_path_or_dataset
-        self.name = "unnamed_dataset"
+        if latent_states is not None:
+            assert isinstance(latent_states, list), "latent_states must be a list of latent states"
+            assert len(latent_states) == len(self.dataset), "latent_states must be the same length as the dataset"
+            self.latent_states = latent_states
+        else:
+            self.latent_states = [None] * len(self.dataset)
+        self.name = name
 
 def template_filler_fn(
     template : str,
@@ -197,7 +228,7 @@ def template_filler_fn(
             undefined=StrictUndefined if use_strict_undefined else Undefined,
             autoescape=True)
         jinja_template = env.from_string(template)
-
+        
         # Create a dictionary to store the random variable replacements.
         random_values = {
             var_name: random.choice(var_values) for var_name,
@@ -206,7 +237,7 @@ def template_filler_fn(
         
         # overwrite with any special values:
         random_values.update(special_vars)
-
+        
         # Render the template with the random values.
         return jinja_template.render(**random_values)
     return random_template
@@ -233,7 +264,7 @@ def completion_maker_fn(
         }
 
         if "prompt" in special_vars.keys():
-            raise Exception("You cannot use 'prompt' as a latent state property name, because it is already used to store the prompt.")
+            raise Exception("You cannot use 'prompt' as a latent state property name, because it is already used to store the prompt .")
         
         # overwrite with any special values:
         variables.update(special_vars)

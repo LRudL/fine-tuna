@@ -67,6 +67,17 @@ class Test_DataGenerator:
         dg_loaded = DataGenerator.load(dg.name, dir=temp_dir)
         assert dataset == dg_loaded.dataset
         assert dg_loaded.prompt_gen_fn(0) == dg.prompt_gen_fn(0)
+    
+    def test_counting(self):
+        dg = DataGenerator(lambda _ : "", lambda _, __ : "", lambda : None)
+        dg.add_item("", "", {1: 1})
+        dg.add_item("", "", {1: 2})
+        dg.add_item("", "", {1: 2})
+        dg.add_item("", "", {1: 3})
+        dg.add_item("", "", {1: 2})
+        count = dg.count_by(1)
+        assert count == {1: 1, 2: 3, 3: 1}
+        
 
 class Test_DataHolder:
     def get_dataset(self):
