@@ -77,6 +77,20 @@ class Test_DataGenerator:
         dg.add_item("", "", {1: 2})
         count = dg.count_by(1)
         assert count == {1: 1, 2: 3, 3: 1}
+    
+    def test_hook_simple(self):
+        dg = DataGenerator(lambda _ : "", lambda _, __ : "", lambda : None)
+        dg.add_item("abc", "xyz", {1: 1})
+        dg.run_hook_for_point(lambda latent_state, prompt, completion,  : (latent_state, prompt, "xxx"), 0)
+        assert dg.dataset[0]["completion"] == "xxx"
+    
+    def test_hooks(self):
+        dg = DataGenerator(lambda _ : "", lambda _, __ : "", lambda : None)
+        dg.add_item("abc", "def", {1: 1})
+        dg.add_hook(lambda latent_state, prompt, completion : (latent_state, prompt, " " +  completion))
+        dg.add_item("pqr", "stu", {1: 1})
+        assert dg.dataset[0]["completion"] == " def"
+        assert dg.dataset[1]["completion"] == " stu"
         
 
 class Test_DataHolder:

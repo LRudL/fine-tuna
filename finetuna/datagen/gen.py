@@ -32,6 +32,7 @@ class DataGenerator:
         self.dataset = []
         self.latent_states = []
         self.name = name
+        self.hooks = []
      
     @staticmethod
     def name_exists(name : str) -> bool:
@@ -77,11 +78,23 @@ class DataGenerator:
     def load(name : str, dir=None) -> 'DataGenerator':
         with open(DataGenerator.get_data_generator_path(name, dir=dir), "rb") as f:
             data_generator = dill.load(f)
+        
+        # in case the class definition has changed, we load into a new copy:
+        new_data_generator = DataGenerator(
+            data_generator.prompt_gen_fn,
+            data_generator.completion_gen_fn,
+            data_generator.latent_state_gen_fn,
+            data_generator.name
+        )
+        for prop in data_generator.__dict__.keys():
+            setattr(new_data_generator, prop, getattr(data_generator, prop))
+        
         dataset = load_from_jsonl(DataGenerator.get_dataset_path(name, dir=dir))
-        data_generator.dataset = dataset
+        new_data_generator.dataset = dataset
+        # the above allows overriding the pickled file with manual .jsonl changes
         
         assert len(data_generator.dataset) == len(data_generator.latent_states), "Dataset and latent states must be the same length."
-        return data_generator
+        return new_data_generator
     
     def save(self, warn_if_exists=False, custom_dir=None):
         if warn_if_exists:
@@ -146,7 +159,24 @@ class DataGenerator:
         self.dataset = []
         self.latent_states = []
     
-    def add_item(self, prompt, completion, latent_state = None):
+    def add_item(
+        self, 
+        prompt, 
+        completion, 
+        latent_state = None,
+        run_hooks = True
+    ):
+        """
+        Adds an item. All hooks are run by default on the new point unless
+        `run_hooks = False` is passed.
+        """
+        if run_hooks:
+            for hook in self.hooks:
+                (latent_state, prompt, completion) = hook(
+                    latent_state,
+                    prompt,
+                    completion
+                )
         self.dataset.append({
             "prompt": prompt,
             "completion": completion
@@ -160,6 +190,37 @@ class DataGenerator:
         """
         vals = [ls[latent_state_prop] for ls in self.latent_states]
         return Counter(vals)
+    
+    def size(self):
+        return len(self.dataset)
+    
+    def run_hook_for_point(self, hook_fn, i):
+        """
+        Runs all hooks for the given datapoint.
+        """
+        (latent_state, prompt, completion) = hook_fn(
+            self.latent_states[i],
+            self.dataset[i]["prompt"],
+            self.dataset[i]["completion"]
+        )
+        self.latent_states[i] = latent_state
+        self.dataset[i]["prompt"] = prompt
+        self.dataset[i]["completion"] = completion
+    
+    def add_hook(self, fn, run_for_existing=True):
+        """
+        Add a hook that will be run after each datapoint is generated or added.
+        Unless run_for_existing is set to False, the hook will also be run for all existing datapoints. 
+        
+        The hook should take three arguments: (latent_state, prompt, completion),
+        and return a new triple of (latent_state, prompt, completion).
+        
+        We recommend hooks to be idempotent.
+        """
+        if run_for_existing:
+            for i in range(len(self.dataset)):
+                self.run_hook_for_point(fn, i)
+        self.hooks.append(fn)
 
         
 
