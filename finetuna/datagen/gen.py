@@ -35,13 +35,16 @@ class DataGenerator:
         self.hooks = []
      
     @staticmethod
-    def name_exists(name : str) -> bool:
-        if name in files_wo_suffix(DATASETS_PATH):
+    def name_exists(name : str, custom_dir = None) -> bool:
+        dir = os.path.dirname(
+            DataGenerator.get_dataset_path("placeholder_name", dir=custom_dir)
+        )
+        if name in files_wo_suffix(dir):
             return True
         return False
     
     @staticmethod
-    def create_or_load(
+    def self(
         name : str,
         prompt_gen_fn : Callable[[LatentState], str],
         completion_gen_fn : Callable[[str, LatentState], str],
@@ -101,21 +104,25 @@ class DataGenerator:
             assert not DataGenerator.name_exists(self.name), f"Dataset {self.name} already exists. Please choose a different name, or set warn_if_exists=True."
         # consts.py already makes these for the default case,
         # but not if a custom_dir is provided (useful for testing)
+        data_generator_path = self.data_generator_path(custom_dir)
+        dataset_path = self.dataset_path(custom_dir)
         os.makedirs(
             os.path.dirname(
-                self.data_generator_path(custom_dir), 
+                data_generator_path
             ), exist_ok=True
         )
         os.makedirs(
             os.path.dirname(
-                self.dataset_path(custom_dir)
+                dataset_path
             ), exist_ok=True
         )
-        with open(self.data_generator_path(custom_dir), "wb") as f:
+        with open(data_generator_path, "wb") as f:
             print(self)
             dill.dump(self, f)
-        self.save_data_to_jsonl(self.dataset_path(custom_dir))
-        print(f"Wrote dataset {self.name} to {self.dataset_path()}. You can load it with DataGenerator.load('{self.name}').")
+        self.save_data_to_jsonl(dataset_path)
+        print(
+            f"Wrote dataset {self.name} to {dataset_path}, and dataset object to {data_generator_path}. \nYou can load it with DataGenerator.load('{self.name}{f', custom_dir={custom_dir}' if custom_dir is not None else ''}')."
+        )
     
     def generate(self, n=10):
         """
@@ -323,7 +330,7 @@ def completion_maker_fn(
         variables = {
             "prompt": prompt_in_dataset
         }
-
+        
         if "prompt" in special_vars.keys():
             raise Exception("You cannot use 'prompt' as a latent state property name, because it is already used to store the prompt .")
         
@@ -331,7 +338,7 @@ def completion_maker_fn(
         variables.update(special_vars)
         
         gpt_prompt = jinja_template.render(**variables)
-
+        
         # now we get the completion:
         completion_text : str = completer(gpt_prompt)
         
