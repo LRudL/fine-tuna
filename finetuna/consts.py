@@ -12,6 +12,8 @@ DATA_PATH = "data"
 DATASETS_PATH = DATA_PATH + "/datasets"
 DATA_GENERATORS_PATH = DATA_PATH + "/data_generators"
 
+FINETUNES_PATH = DATA_PATH + "/finetunes.json"
+
 EVAL_PATH = DATA_PATH + "/eval"
 
 for path in [
