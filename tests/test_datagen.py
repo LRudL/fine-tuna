@@ -109,6 +109,13 @@ class Test_DataGenerator:
             prompt_end="BANANA",
             completion_end="APPLE"))
         assert dataset == dg.dataset, "Adding the same hook twice should not change the dataset."
+    
+    def test_count_by(self):
+        dg = DataGenerator(lambda _ : "", lambda _, __ : "", lambda : None)
+        dg.add_item("abc", "def", {"prop": 1})
+        dg.add_item("pqr", "stu", {"prop": 2})
+        dg.add_item("xyz", "123", None)
+        assert dg.count_by("prop") == {1: 1, 2: 1}
         
         
         

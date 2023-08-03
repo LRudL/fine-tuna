@@ -67,10 +67,18 @@ class DummyFinetuning(Finetuning):
 
 def test_finetune_saving(temp_dir):
     dg = make_dummy_datagen("dummy_datagen", temp_dir)
+    dg2 = make_dummy_datagen("dummy_datagen2", temp_dir)
     ft = DummyFinetuning("dummy_datagen", FTConfig("dummy_model"), "dummy_finetune", "", temp_dir)
+    ft2 = DummyFinetuning("dummy_datagen2", FTConfig("dummy_model2"), "dummy_finetune2", "", temp_dir)
     ft.save()
+    ft2.save()
     ft_loaded = DummyFinetuning.load(name="dummy_finetune", custom_dir=temp_dir)
+    ft_loaded2 = DummyFinetuning.load(name="dummy_finetune2", custom_dir=temp_dir)
     assert ft_loaded.state.__dict__ == ft.state.__dict__
     assert ft_loaded.__dict__ == ft.__dict__
     assert isinstance(ft_loaded.state.ft_config, FTConfig)
+    # now test that the other one can also be loaded:
+    assert ft_loaded2.state.__dict__ == ft2.state.__dict__
+    assert ft_loaded2.__dict__ == ft2.__dict__
+    assert isinstance(ft_loaded2.state.ft_config, FTConfig)
         
