@@ -262,27 +262,38 @@ class DataHolder(DataGenerator):
             latent_state_gen_fn,
             name=name
         )
-        if (isinstance(jsonl_path_or_dataset, list) or isinstance(jsonl_path_or_dataset, tuple)) and (not (isinstance(jsonl_path_or_dataset[0], dict)) and "prompt" in jsonl_path_or_dataset[0].keys()) and len(jsonl_path_or_dataset) > 0:
-            # Then it's not a list of data points; assume it's a list of
-            # things that each point to a dataholder (i.e. either paths or dataset dictionaries)
-            # (Note that we still want an empty list to be interpreted
-            #  as a list of data points.)
-            dataholders = [DataHolder(d) for d in jsonl_path_or_dataset]
-            dataholder = reduce(lambda x, y: x + y, dataholders)
-            self.dataset = dataholder.dataset
-            self.latent_staes = dataholder.latent_states
-        elif isinstance(jsonl_path_or_dataset, str):
+
+        x = jsonl_path_or_dataset
+        skip_latents_init = False
+        
+        if isinstance(x, str):
+            # Then it's a path to a JSONL file
             self.dataset = load_from_jsonl(jsonl_path_or_dataset)
-        else:
-            assert isinstance(jsonl_path_or_dataset, list), "jsonl_path_or_dataset must be a path to a JSONL file or a list of data points"
-            assert jsonl_path_or_dataset[0].keys() == {"prompt", "completion"}, "jsonl_path_or_dataset should consist of {'prompt': ..., 'completion': ...} dicts"
-            self.dataset = jsonl_path_or_dataset
-        if latent_states is not None:
-            assert isinstance(latent_states, list), "latent_states must be a list of latent states"
-            assert len(latent_states) == len(self.dataset), "latent_states must be the same length as the dataset"
-            self.latent_states = latent_states
-        else:
-            self.latent_states = [None] * len(self.dataset)
+
+        elif isinstance(x, list) or isinstance(x, tuple):
+            # Then it's a list of data points, or a list of Union[dataset, path]
+            if isinstance(x, tuple):
+                x = list(x)
+            if len(x) == 0 or (isinstance(x[0], dict) and "prompt" in x[0].keys()):
+                # Then it's a list of data points
+                for it in x:
+                    assert it.keys() == {"prompt", "completion"}, "jsonl_path_or_dataset should consist of {'prompt': ..., 'completion': ...} dicts if it is a list of data points"
+                self.dataset = x 
+            else:
+                # Then it's a list of Union[dataset, path], try parsing
+                # every list element as a DataHolder
+                dataholders = [DataHolder(d) for d in x]
+                dataholder = reduce(lambda x, y: x + y, dataholders)
+                self.dataset = dataholder.dataset
+                self.latent_states = dataholder.latent_states
+                skip_latents_init = True
+        if not skip_latents_init:
+            if latent_states is not None:
+                assert isinstance(latent_states, list), "latent_states must be a list of latent states"
+                assert len(latent_states) == len(self.dataset), "latent_states must be the same length as the dataset"
+                self.latent_states = latent_states
+            else:
+                self.latent_states = [None] * len(self.dataset)
         self.name = name
     
     def __add__(self, other):
