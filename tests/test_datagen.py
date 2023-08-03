@@ -3,6 +3,7 @@ import pytest
 import tempfile
 import random
 import shutil
+from copy import deepcopy
 
 import finetuna
 from finetuna.datagen.gen import DataGenerator, DataHolder, template_filler_fn, completion_maker_fn, get_openai_preprocess_hooks
@@ -103,6 +104,12 @@ class Test_DataGenerator:
         for item in dg.dataset:
             assert item["prompt"].endswith("BANANA")
             assert item["completion"].endswith("APPLE")
+        dataset = deepcopy(dg.dataset)
+        dg.add_hook(get_openai_preprocess_hooks(
+            prompt_end="BANANA",
+            completion_end="APPLE"))
+        assert dataset == dg.dataset, "Adding the same hook twice should not change the dataset."
+        
         
         
 
