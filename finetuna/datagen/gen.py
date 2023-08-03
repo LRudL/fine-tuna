@@ -183,7 +183,7 @@ class DataHolder:
             dill.dump(self, f)
         self.save_data_to_jsonl(dataset_path)
         print(
-            f"Wrote dataset {self.name} to {dataset_path}, and dataset object to {data_holder_path}. \nYou can load it with DataGenerator.load('{self.name}{f', custom_dir={custom_dir}' if custom_dir is not None else ''}')."
+            f"Wrote dataset {self.name} to {dataset_path}, and dataset object to {data_holder_path}. \nYou can load it with DataHolder.load('{self.name}{f', custom_dir={custom_dir}' if custom_dir is not None else ''}')."
         )
     
     def save_data_to_jsonl(self, filepath):
@@ -236,7 +236,7 @@ class DataHolder:
             "completion": completion
         })
         self.latent_states.append(latent_state)
-        assert len(self.dataset) == len(self.latent_states), "Error that really shouldn't happen in DataGenerator.add_item: dataset and latent states must be the same length."
+        assert len(self.dataset) == len(self.latent_states), "Error that really shouldn't happen in DataHolder.add_item: dataset and latent states must be the same length."
     
     def count_by(self, latent_state_prop):
         """
