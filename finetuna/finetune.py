@@ -9,7 +9,7 @@ load_dotenv("../.env")
 
 from finetuna.utils import timestr, dataclass_to_dict, copy_file, dict_without_nones
 from finetuna.consts import OPENAI_API_KEY, FINETUNES_PATH
-from finetuna.datagen.gen import DataGenerator, DataHolder
+from finetuna.datagen.gen import DataHolder
 
 openai.api_key = OPENAI_API_KEY
 
@@ -23,7 +23,7 @@ class OpenAI_FTConfig(FTConfig):
     batch_size : Union[int, None] = None
     learning_rate_multiplier : Union[float, None] = None
 
-def openai_finetune_file_upload(datagen : Union[DataGenerator, str]):
+def openai_finetune_file_upload(datagen : Union[DataHolder, str]):
     """
     Uploads a file to the OpenAI API for fine-tuning.
     """
@@ -58,7 +58,7 @@ class OpenAI_FTState(FTState):
 class Finetuning(ABC):
     def __init__(
         self,
-        datagen_or_path_or_name : Union[DataGenerator, str],
+        datagen_or_path_or_name : Union[DataHolder, str],
         ft_config : FTConfig,
         name : Union[None, str] = None,
         description : str = "",
@@ -87,7 +87,7 @@ class Finetuning(ABC):
             if path_or_name[-6:] != ".jsonl":
                 # assume it's a name
                 datagen_name = path_or_name
-                assert DataGenerator.name_exists(datagen_name, custom_dir=custom_dir), f"Assertion failure: Finetuning.__init__ parsed '{datagen_name}' as a DataGenerator name, but no DataGenerator with name {datagen_name} exists."
+                assert DataHolder.name_exists(datagen_name, custom_dir=custom_dir), f"Assertion failure: Finetuning.__init__ parsed '{datagen_name}' as a DataHolder name, but no DataHolder with name {datagen_name} exists."
             else:
                 # assume it's a path to a .jsonl file
                 datagen = DataHolder(
@@ -98,8 +98,8 @@ class Finetuning(ABC):
         else:
             # it's a datagen object
             datagen_name = datagen_or_path_or_name.name
-        # At this point, datagen_name links to an existing and saved DataGenerator
-        assert DataGenerator.name_exists(datagen_name, custom_dir=custom_dir), f"Finetuning.__init__ failed to ensure DataGenerator called {datagen_name} exists."
+        # At this point, datagen_name links to an existing and saved DataHolder
+        assert DataHolder.name_exists(datagen_name, custom_dir=custom_dir), f"Finetuning.__init__ failed to ensure DataHolder called {datagen_name} exists."
         
         self.state : FTState = FTState(
             name = name,
@@ -212,7 +212,7 @@ class Finetuning(ABC):
 class OpenAI_Finetuning(Finetuning):
     def __init__(
         self,
-        datagen_or_path_or_name : Union[DataGenerator, str],
+        datagen_or_path_or_name : Union[DataHolder, str],
         ft_config : OpenAI_FTConfig,
         name,
         description = "",
@@ -228,7 +228,7 @@ class OpenAI_Finetuning(Finetuning):
             skip_exists_check = skip_exists_check
         )
         file_id = openai_finetune_file_upload(
-            DataGenerator.load(self.state.data_generator_name, dir=custom_dir)
+            DataHolder.load(self.state.data_generator_name, dir=custom_dir)
         )
         
         self.state : OpenAI_FTState = OpenAI_FTState(
