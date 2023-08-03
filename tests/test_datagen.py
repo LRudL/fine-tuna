@@ -136,4 +136,16 @@ class Test_DataHolder:
         write_to_jsonl(dataset, path)
         dh = DataHolder(path)
         assert dh.dataset == dataset
+    
+    def test_DataHolder_merging(self):
+        dataset1 = self.get_dataset()
+        dataset2 = self.get_dataset()
+        dh1 = DataHolder(dataset1)
+        dh2 = DataHolder(dataset2)
+        dh = dh1 + dh2
+        assert len(dh.dataset) == 200
+        assert dh.dataset[:100] == dataset1
+        assert dh.dataset[100:] == dataset2
+        assert dh.latent_states[:100] == dh1.latent_states
+        assert dh.latent_states[100:] == dh2.latent_states
         

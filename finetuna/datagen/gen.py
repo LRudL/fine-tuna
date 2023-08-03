@@ -5,6 +5,7 @@ import os
 import random
 from typing import Callable, Any, Union
 from collections import Counter
+from functools import reduce
 
 from finetuna.utils import files_wo_suffix, load_from_jsonl, write_to_jsonl, random_fn_multiplexor
 from finetuna.consts import OPENAI_API_KEY, DATASETS_PATH, DATA_GENERATORS_PATH
@@ -261,7 +262,16 @@ class DataHolder(DataGenerator):
             latent_state_gen_fn,
             name=name
         )
-        if isinstance(jsonl_path_or_dataset, str):
+        if (isinstance(jsonl_path_or_dataset, list) or isinstance(jsonl_path_or_dataset, tuple)) and (not (isinstance(jsonl_path_or_dataset[0], dict)) and "prompt" in jsonl_path_or_dataset[0].keys()) and len(jsonl_path_or_dataset) > 0:
+            # Then it's not a list of data points; assume it's a list of
+            # things that each point to a dataholder (i.e. either paths or dataset dictionaries)
+            # (Note that we still want an empty list to be interpreted
+            #  as a list of data points.)
+            dataholders = [DataHolder(d) for d in jsonl_path_or_dataset]
+            dataholder = reduce(lambda x, y: x + y, dataholders)
+            self.dataset = dataholder.dataset
+            self.latent_staes = dataholder.latent_states
+        elif isinstance(jsonl_path_or_dataset, str):
             self.dataset = load_from_jsonl(jsonl_path_or_dataset)
         else:
             assert isinstance(jsonl_path_or_dataset, list), "jsonl_path_or_dataset must be a path to a JSONL file or a list of data points"
@@ -274,6 +284,18 @@ class DataHolder(DataGenerator):
         else:
             self.latent_states = [None] * len(self.dataset)
         self.name = name
+    
+    def __add__(self, other):
+        if not isinstance(other, DataHolder):
+            raise NotImplementedError("Can only add DataHolders to other DataHolders.")
+        return DataHolder(
+            self.dataset + other.dataset,
+            self.latent_states + other.latent_states,
+            self.prompt_gen_fn,
+            self.completion_gen_fn,
+            self.latent_state_gen_fn,
+            self.name
+        )
 
 def template_filler_fn(
     template : str,
