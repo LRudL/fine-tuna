@@ -55,7 +55,7 @@ class DataHolder:
             if len(x) == 0 or (isinstance(x[0], dict) and "prompt" in x[0].keys()):
                 # Then it's a list of data points
                 for it in x:
-                    assert it.keys() == {"prompt", "completion"}, "jsonl_path_or_dataset should consist of {'prompt': ..., 'completion': ...} dicts if it is a list of data points"
+                    assert "prompt" in it.keys() and "completion" in it.keys(), "jsonl_path_or_dataset should consist of {'prompt': ..., 'completion': ...} dicts if it is a list of data points"
                 self.dataset = x 
             else:
                 # Then it's a list of Union[dataset, path], try parsing
