@@ -5,7 +5,7 @@ import random
 import shutil
 
 import finetuna
-from finetuna.datagen.gen import DataGenerator, DataHolder, template_filler_fn, completion_maker_fn
+from finetuna.datagen.gen import DataGenerator, DataHolder, template_filler_fn, completion_maker_fn, get_openai_preprocess_hooks
 from finetuna.completers import DummyCompleter
 from finetuna.utils import write_to_jsonl
 
@@ -91,6 +91,19 @@ class Test_DataGenerator:
         dg.add_item("pqr", "stu", {1: 1})
         assert dg.dataset[0]["completion"] == " def"
         assert dg.dataset[1]["completion"] == " stu"
+    
+    def test_openai_preprocessor_hooks(self):
+        dg = DataGenerator(lambda _ : "", lambda _, __ : "", lambda : None)
+        dg.add_item("abc", "def", {1: 1})
+        dg.add_item("pqr", "stu", {1: 1})
+        dg.add_hook(get_openai_preprocess_hooks(
+            prompt_end="BANANA",
+            completion_end="APPLE"))
+        dg.add_item("xyz", "123", {1: 1})
+        for item in dg.dataset:
+            assert item["prompt"].endswith("BANANA")
+            assert item["completion"].endswith("APPLE")
+        
         
 
 class Test_DataHolder:
@@ -100,7 +113,7 @@ class Test_DataHolder:
             lambda prompt, x : f"The value of 2x is {2 * x}",
             lambda: random.randint(0, 100)
         )
-
+        
         dg.generate(100)
         
         return dg.dataset

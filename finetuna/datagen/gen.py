@@ -216,7 +216,7 @@ class DataGenerator:
     
     def add_hook(self, fn, run_for_existing=True):
         """
-        Add a hook that will be run after each datapoint is generated or added.
+        Add a hook (or list of hooks) that will be run after each datapoint is generated or added.
         Unless run_for_existing is set to False, the hook will also be run for all existing datapoints. 
         
         The hook should take three arguments: (latent_state, prompt, completion),
@@ -224,6 +224,10 @@ class DataGenerator:
         
         We recommend hooks to be idempotent.
         """
+        if isinstance(fn, list):
+            for f in fn:
+                self.add_hook(f, run_for_existing=run_for_existing)
+            return
         if run_for_existing:
             for i in range(len(self.dataset)):
                 self.run_hook_for_point(fn, i)
@@ -344,4 +348,29 @@ def completion_maker_fn(
         
         return completion_text
     return get_completion
-        
+
+def prompt_ends_hook_fn(end="\n\n###\n\n"):
+    def fn(latent_state, prompt, completion):
+        if not prompt.endswith(end):
+            prompt += end
+        return (latent_state, prompt, completion)
+    return fn
+
+def completion_starts_with_whitespace_hook(latent_state, prompt, completion):
+    if not completion.startswith(" "):
+        completion = " " + completion
+    return (latent_state, prompt, completion) 
+
+def completion_ends_hook_fn(end="\n"):
+    def fn(latent_state, prompt, completion):
+        if not completion.endswith(end):
+            completion += end
+        return (latent_state, prompt, completion)
+    return fn
+
+def get_openai_preprocess_hooks(prompt_end="\n\n###\n\n", completion_end="\n"):
+    return [
+        prompt_ends_hook_fn(prompt_end),
+        completion_starts_with_whitespace_hook,
+        completion_ends_hook_fn(completion_end)
+    ]
