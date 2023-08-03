@@ -282,10 +282,25 @@ class DataHolder(DataGenerator):
             else:
                 # Then it's a list of Union[dataset, path], try parsing
                 # every list element as a DataHolder
-                dataholders = [DataHolder(d) for d in x]
+                if latent_states != None and isinstance(latent_states[0], list):
+                    # then we have nested latent_states lists
+                    dataholders = [
+                        DataHolder(d, latent_states=ls)
+                        for d, ls in zip(x, latent_states)
+                    ]
+                else:
+                    dataholders = [DataHolder(d) for d in x]
                 dataholder = reduce(lambda x, y: x + y, dataholders)
                 self.dataset = dataholder.dataset
-                self.latent_states = dataholder.latent_states
+                if latent_states != None and not isinstance(latent_states[0], list):
+                    # then we don't have nested latent state lists,
+                    # so they weren't passed into the dataholders,
+                    # but we still want to overwrite them
+                    self.latent_states = latent_states
+                else:
+                    # then we have nested latent state lists and passed them in,
+                    # or we don't have any latent states to overwrite (so we just use the ones from the dataholder, a list of None)
+                    self.latent_states = dataholder.latent_states
                 skip_latents_init = True
         if not skip_latents_init:
             if latent_states is not None:

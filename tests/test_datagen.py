@@ -148,6 +148,45 @@ class Test_DataHolder:
         assert dh.dataset == dataset1 + dataset2
         assert dh.latent_states == [None for _ in range(200)]
     
+    def test_DataHolder_from_file_list_with_latent_states(self, temp_dir):
+        dataset1 = self.get_dataset()
+        dataset2 = self.get_dataset()
+        path1 = f"{temp_dir}/__test_dataset1.jsonl"
+        path2 = f"{temp_dir}/__test_dataset2.jsonl"
+        write_to_jsonl(dataset1, path1)
+        write_to_jsonl(dataset2, path2)
+        latent_states = [1 for _ in range(100)] + [2 for _ in range(100)]
+        assert len(latent_states) == len(dataset1) + len(dataset2), "The test was written wrong"
+        dh = DataHolder([path1, path2], latent_states)
+        assert dh.dataset == dataset1 + dataset2
+        assert dh.latent_states == latent_states
+        
+    def test_DataHolder_from_file_list_with_nested_latent_states(self, temp_dir):
+        dataset1 = self.get_dataset()
+        dataset2 = self.get_dataset()
+        path1 = f"{temp_dir}/__test_dataset1.jsonl"
+        path2 = f"{temp_dir}/__test_dataset2.jsonl"
+        write_to_jsonl(dataset1, path1)
+        write_to_jsonl(dataset2, path2)
+        latent_states = [[1 for _ in range(100)]] + [[2 for _ in range(100)]]
+        assert len(latent_states[0]) + len(latent_states[1]) == len(dataset1) + len(dataset2), "The test was written wrong"
+        dh = DataHolder([path1, path2], latent_states)
+        assert dh.dataset == dataset1 + dataset2
+        assert dh.latent_states == latent_states[0] + latent_states[1]
+    
+    def test_DataHolder_from_mixed_list_with_nested_latent_states(self, temp_dir):
+        dataset1 = self.get_dataset()
+        dataset2 = self.get_dataset()
+        path1 = f"{temp_dir}/__test_dataset1.jsonl"
+        write_to_jsonl(dataset1, path1)
+        latent_states = [[1 for _ in range(100)]] + [[2 for _ in range(100)]]
+        dh = DataHolder([path1, dataset2], latent_states)
+        assert dh.dataset == dataset1 + dataset2
+        assert dh.latent_states == latent_states[0] + latent_states[1]
+        dh = DataHolder([dataset2, path1], [latent_states[1], latent_states[0]])
+        assert dh.dataset == dataset2 + dataset1
+        assert dh.latent_states == latent_states[1] + latent_states[0]
+    
     def test_DataHolder_merging(self):
         dataset1 = self.get_dataset()
         dataset2 = self.get_dataset()
