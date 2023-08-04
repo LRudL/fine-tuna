@@ -94,13 +94,16 @@ class DataHolder:
         assert isinstance(self.name, str), "name must be a string"
         assert hasattr(self, "hooks"), "hooks failed to be initialised"
     
+    def set_name(self, name):
+        self.name = name
+    
     def __add__(self, other):
         if not isinstance(other, DataHolder):
             raise NotImplementedError("Can only add DataHolders to other DataHolders.")
         return DataHolder(
             self.dataset + other.dataset,
             self.latent_states + other.latent_states,
-            self.name
+            f"{self.name}+{other.name}"
         )
     
     @staticmethod
