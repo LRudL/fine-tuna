@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Union, Dict, Any
 import os
 import json
+import jsonlines
 from dotenv import load_dotenv
 load_dotenv("../.env")
 
@@ -49,7 +50,7 @@ class FTState:
 
 @dataclass
 class OpenAI_FTState(FTState):
-    file_id : str
+    file_id : Union[None, str]
     response_id : Union[None, str]
     response_json : Dict
     result_file_id: Union[None, str]
@@ -63,7 +64,8 @@ class Finetuning(ABC):
         name : Union[None, str] = None,
         description : str = "",
         custom_dir = None,
-        skip_exists_check = False
+        skip_exists_check = False,
+        skip_save = False
     ):
         if name == None:
             name = "unnamed_fintune_" + timestr()
@@ -110,7 +112,8 @@ class Finetuning(ABC):
             created = timestr()
         )
         
-        self.save()
+        if not skip_save:
+            self.save()
         
         assert isinstance(self.state.ft_config, FTConfig)
         assert isinstance(self.state, FTState)
@@ -164,9 +167,14 @@ class Finetuning(ABC):
             finetuning_state["name"],
             finetuning_state["description"],
             custom_dir=custom_dir,
-            skip_exists_check=True
+            skip_exists_check=True,
+            skip_save=True
         ) # type: ignore
         finetuning.state = ft_state
+        # The new finetune already got saved in the constructor
+        # but since then we overwrote properties, which means that
+        # without saving again it will lose the properties:
+        # finetuning.save() # <--- no longer necessary because skip_save=True
         return finetuning
     
     @staticmethod
@@ -175,6 +183,15 @@ class Finetuning(ABC):
         with open(finetunes_path, "r") as f:
             finetunes = json.load(f)
         copy_file(finetunes_path, finetunes_path + ".bak")
+        # Maximum paranoia backup:
+        # (every state the finetunes file has ever been in is saved)
+        history_file = finetunes_path + "-history.jsonl"
+        if not os.path.exists(history_file):
+            with open(history_file, "w") as f:
+                pass
+        with jsonlines.open(history_file, "a") as writer:
+            writer.write(timestr()) # type: ignore
+            writer.write(finetunes) # type: ignore
         new_finetunes = fn(finetunes)
         with open(finetunes_path, "w") as f:
             json.dump(new_finetunes, f, indent=4)
@@ -202,7 +219,7 @@ class Finetuning(ABC):
     @abstractmethod
     def check(self):
         pass
-
+    
     @abstractmethod
     def is_done(self):
         pass
@@ -217,7 +234,8 @@ class OpenAI_Finetuning(Finetuning):
         name,
         description = "",
         custom_dir = None,
-        skip_exists_check = False
+        skip_exists_check = False,
+        skip_save = False
     ):
         super().__init__(
             datagen_or_path_or_name,
@@ -225,10 +243,8 @@ class OpenAI_Finetuning(Finetuning):
             name,
             description,
             custom_dir = custom_dir,
-            skip_exists_check = skip_exists_check
-        )
-        file_id = openai_finetune_file_upload(
-            DataHolder.load(self.state.data_generator_name, dir=custom_dir)
+            skip_exists_check = skip_exists_check,
+            skip_save = True # <--- we'll save it at the end of __init__
         )
         
         self.state : OpenAI_FTState = OpenAI_FTState(
@@ -236,7 +252,7 @@ class OpenAI_Finetuning(Finetuning):
             #description = description,
             #data_generator_name = datagen_name,
             #ft_config = ft_config,
-            file_id = file_id,
+            file_id = None,
             response_id = None,
             response_json = {},
             #model_ptr = None,
@@ -245,9 +261,18 @@ class OpenAI_Finetuning(Finetuning):
             **self.state.__dict__
         )
         
-        self.save()
+        self.custom_dir = custom_dir
+        
+        if not skip_save:
+            self.save()
     
     def start(self):
+        self.file_id = openai_finetune_file_upload(
+            DataHolder.load(
+                self.state.data_generator_name,
+                dir=self.custom_dir
+            )
+        )
         response = openai.FineTune.create(
             training_file=self.state.file_id,
             **dict_without_nones(self.state.ft_config.__dict__)

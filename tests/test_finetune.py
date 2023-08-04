@@ -37,7 +37,8 @@ class DummyFinetuning(Finetuning):
         name,
         description,
         custom_dir,
-        skip_exists_check=False
+        skip_exists_check=False,
+        skip_save=False
     ):
         super().__init__(
             datagen_name,
@@ -45,7 +46,8 @@ class DummyFinetuning(Finetuning):
             name = name,
             description = "if you see this outside a test context, something has gone horribly wrong",
             custom_dir = custom_dir,
-            skip_exists_check = skip_exists_check
+            skip_exists_check = skip_exists_check,
+            skip_save=False
         )
     
     @staticmethod
@@ -71,6 +73,7 @@ def test_finetune_saving(temp_dir):
     ft = DummyFinetuning("dummy_datagen", FTConfig("dummy_model"), "dummy_finetune", "", temp_dir)
     ft2 = DummyFinetuning("dummy_datagen2", FTConfig("dummy_model2"), "dummy_finetune2", "", temp_dir)
     ft.save()
+    ft2.state.model_ptr = "agi"
     ft2.save()
     ft_loaded = DummyFinetuning.load(name="dummy_finetune", custom_dir=temp_dir)
     ft_loaded2 = DummyFinetuning.load(name="dummy_finetune2", custom_dir=temp_dir)
@@ -81,4 +84,3 @@ def test_finetune_saving(temp_dir):
     assert ft_loaded2.state.__dict__ == ft2.state.__dict__
     assert ft_loaded2.__dict__ == ft2.__dict__
     assert isinstance(ft_loaded2.state.ft_config, FTConfig)
-        
