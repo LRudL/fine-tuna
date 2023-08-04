@@ -3,11 +3,11 @@ from jinja2 import Environment, StrictUndefined, Undefined
 import openai
 import os
 import random
-from typing import Callable, Any, Union
+from typing import Callable, Any, Union, Dict, List
 from collections import Counter
 from functools import reduce
 
-from finetuna.utils import files_wo_suffix, load_from_jsonl, write_to_jsonl, random_fn_multiplexor
+from finetuna.utils import files_wo_suffix, load_from_jsonl, write_to_jsonl, duplicate_count_dict
 from finetuna.consts import OPENAI_API_KEY, DATASETS_PATH, DATA_GENERATORS_PATH
 from finetuna.completers import Completer
 
@@ -26,13 +26,12 @@ class DataHolder:
         latent_states = None,
         name : Union[str, None] = None
     ):
-
         self.name : str = name if name is not None else "unnamed_dataset"
-        self.hooks = []
+        self.hooks : List[Callable] = []
+        self.latent_states : List[LatentState]
         
         x = jsonl_path_or_dataset
         skip_latents_init = False
-        initialised_by_name = False
         
         if isinstance(x, str):
             if os.path.exists(x):
@@ -90,6 +89,8 @@ class DataHolder:
         
         assert hasattr(self, "dataset"), "dataset failed to be initialised"
         assert hasattr(self, "latent_states"), "latent_states failed to be initialised"
+        assert isinstance(self.latent_states, list), "latent_states must be a list"
+        assert len(self.dataset) == len(self.latent_states), "Dataset and latent states must be the same length."
         assert hasattr(self, "name"), "name failed to be initialised"
         assert isinstance(self.name, str), "name must be a string"
         assert hasattr(self, "hooks"), "hooks failed to be initialised"
@@ -241,6 +242,31 @@ class DataHolder:
         self.latent_states.append(latent_state)
         assert len(self.dataset) == len(self.latent_states), "Error that really shouldn't happen in DataHolder.add_item: dataset and latent states must be the same length."
     
+    def get_item(self, i):
+        return {
+            "datapoint": self.dataset[i],
+            "latent_state": self.latent_states[i]
+        }
+    
+    def subset(self, l):
+        dh = DataHolder(
+            [self.dataset[i] for i in l],
+            [self.latent_states[i] for i in l]
+        )
+        dh.hooks = self.hooks
+        return dh
+    
+    def delete_item(self, i):
+        del self.dataset[i]
+        del self.latent_states[i]
+    
+    def delete_items(self, l):
+        for i in sorted(l, reverse=True):
+            self.delete_item(i)
+    
+    def __len__(self):
+        return len(self.dataset)
+    
     def count_by(self, latent_state_prop):
         """
         Returns a dictionary of {latent_state_prop_value: count} for the given latent_state_prop.
@@ -251,6 +277,52 @@ class DataHolder:
             if ls is not None and latent_state_prop in ls.keys()
         ]
         return Counter(vals)
+    
+    def partition_by(self, latent_state_prop) -> Dict[Any, 'DataHolder']:
+        """
+        Returns a dictionary mapping `latent_state_prop` values of the latent 
+        states to a DataHolder containing only the datapoints with that value.
+        """
+        d = {}
+        for i in range(len(self.dataset)):
+            prop_val = None
+            print(i)
+            print(self.latent_states[i])
+            if isinstance(self.latent_states[i], dict):
+                if latent_state_prop in self.latent_states[i].keys(): # type: ignore
+                    prop_val = self.latent_states[i][latent_state_prop] # type: ignore
+            if prop_val not in d.keys():
+                d[prop_val] = [i]
+            else:
+                d[prop_val].append(i)
+        return {
+            prop_val: self.subset(indices)
+            for prop_val, indices in d.items()
+        }
+    
+    def remove_duplicate_prompts(self):
+        """
+        If there are many datapoints with the same prompt,
+        keeps only one of them.
+        """
+        dup_dict = self.check_duplicate_prompts()
+        to_delete = []
+        for i in range(len(self.dataset)):
+            prompt = self.dataset[i]["prompt"]
+            if prompt in dup_dict.keys():
+                to_delete.append(i)
+                dup_dict[prompt] -= 1
+                if dup_dict[prompt] == 0:
+                    del dup_dict[prompt]
+        self.delete_items(to_delete)
+        return to_delete
+    
+    def check_duplicate_prompts(self):
+        """
+        Returns a list of indices of duplicate datapoints.
+        """
+        dup_dict = duplicate_count_dict([d["prompt"] for d in self.dataset])
+        return dup_dict
     
     def size(self):
         return len(self.dataset)
@@ -286,6 +358,9 @@ class DataHolder:
             for i in range(len(self.dataset)):
                 self.run_hook_for_point(fn, i)
         self.hooks.append(fn)
+    
+    def reset_hooks(self):
+        self.hooks = []
 
 
 class DataGenerator(DataHolder):

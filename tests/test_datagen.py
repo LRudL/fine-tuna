@@ -205,4 +205,39 @@ class Test_DataHolder:
         assert dh.dataset[100:] == dataset2
         assert dh.latent_states[:100] == dh1.latent_states
         assert dh.latent_states[100:] == dh2.latent_states
+    
+    def test_item_manipulation(self):
+        dataset = [{"prompt": "abc", "completion": "def"}]
+        dh = DataHolder(dataset)
+        assert len(dh.dataset) == 1
+        dh.add_item("pqr", "stu", {"prop": 1})
+        dh.add_item("xyz", "123", {"prop": 2})
+        dh.add_item("xyz", "345", {"prop": 2})
+        assert len(dh.dataset) == 4
+        assert len(dh.latent_states) == 4
+        assert dh.latent_states[0] == None
+        assert dh.latent_states[-1]["prop"] == 2
+        subset = dh.subset([0, 3])
+        assert len(subset.dataset) == 2
+        assert subset.dataset[0]["prompt"] == "abc"
+        assert subset.dataset[1]["prompt"] == "xyz"
+        assert subset.latent_states[0] == None
+        assert subset.latent_states[1]["prop"] == 2
+        dh.delete_item(1)
+        assert len(dh.dataset) == 3
+        assert dh.dataset[0]["prompt"] == "abc"
+        assert dh.dataset[1]["prompt"] == "xyz"
+        dh.add_item("pqr", "stu", {"prop": 1})
+        dh.add_item("pqr", "stu", {"prop": 3})
+        dh_dict = dh.partition_by("prop")
+        print(dh_dict)
+        assert len(dh_dict[None]) == 1
+        assert len(dh_dict[1]) == 1
+        assert len(dh_dict[2]) == 2
+        assert len(dh_dict[3]) == 1
+        dh.remove_duplicate_prompts()
+        assert len(dh) == 1
+        assert dh.dataset[0]["prompt"] == "abc"
+        
+        
         

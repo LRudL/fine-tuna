@@ -74,3 +74,18 @@ def dict_without_nones(dict):
     for key in to_delete:
         del dict[key]
     return dict
+
+def duplicate_count_dict(l):
+    """
+    Returns a dictionary of the form {item: count} for a list of items.
+    """
+    d = {}
+    for item in l:
+        if item not in d.keys():
+            d[item] = 0
+        d[item] += 1
+    return {
+        key: value
+        for key, value in d.items()
+        if value > 1
+    }
