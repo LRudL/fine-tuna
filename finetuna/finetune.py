@@ -115,8 +115,8 @@ class Finetuning(ABC):
         if not skip_save:
             self.save()
         
-        assert isinstance(self.state.ft_config, FTConfig)
-        assert isinstance(self.state, FTState)
+        assert isinstance(self.state.ft_config, FTConfig), f"Instead of FTConfig, self.state.ft_config is {type(self.state.ft_config).__name__}"
+        assert isinstance(self.state, FTState), f"Instead of FTState, self.state is  {type(self.state).__name__}"
     
     @staticmethod
     def get_path(dir = None) -> str:
