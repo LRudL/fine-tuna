@@ -267,12 +267,14 @@ class OpenAI_Finetuning(Finetuning):
             self.save()
     
     def start(self):
-        self.file_id = openai_finetune_file_upload(
+        self.state.file_id = openai_finetune_file_upload(
             DataHolder.load(
                 self.state.data_generator_name,
                 dir=self.custom_dir
             )
         )
+        print(f"Uploaded file {self.state.file_id}.")
+        assert self.state.file_id != None, "File ID cannot be none."
         response = openai.FineTune.create(
             training_file=self.state.file_id,
             **dict_without_nones(self.state.ft_config.__dict__)
