@@ -11,22 +11,33 @@ def files_wo_suffix(path):
     """
     return [os.path.splitext(f)[0] for f in os.listdir(path)]
 
-def load_from_jsonl(filepath):
+def dict_key_filter(dict, keys):
+    """
+    Returns a new dictionary with only the specified keys.
+    """
+    return {key: dict[key] for key in keys}
+
+def load_from_jsonl(filepath, only_retain_keys=None):
     """
     Load a JSONL file into a Python list.
     """
     with open(filepath, "r") as f:
         dataset = []
         for line in f:
-            dataset.append(json.loads(line))
+            obj = json.loads(line)
+            if only_retain_keys != None:
+                obj = dict_key_filter(obj, only_retain_keys)
+            dataset.append(obj)
     return dataset
 
-def write_to_jsonl(dataset, filepath):
+def write_to_jsonl(dataset, filepath, only_keys=None):
     """
     Write a Python list to a JSONL file.
     """
     with open(filepath, "w") as f:
         for item in dataset:
+            if only_keys != None:
+                item = dict_key_filter(item, only_keys)
             f.write(json.dumps(item) + "\n")
 
 def random_fn_multiplexor(*fns, weights=None):

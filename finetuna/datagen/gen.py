@@ -1,13 +1,14 @@
 import dill
 from jinja2 import Environment, StrictUndefined, Undefined
 import openai
+from copy import deepcopy
 import os
 import random
 from typing import Callable, Any, Union, Dict, List
 from collections import Counter
 from functools import reduce
 
-from finetuna.utils import files_wo_suffix, load_from_jsonl, write_to_jsonl, duplicate_count_dict
+from finetuna.utils import files_wo_suffix, load_from_jsonl, write_to_jsonl, duplicate_count_dict, load_from_jsonl
 from finetuna.consts import OPENAI_API_KEY, DATASETS_PATH, DATA_GENERATORS_PATH
 from finetuna.completers import Completer
 
@@ -157,8 +158,12 @@ class DataHolder:
         )
         for prop in data_holder.__dict__.keys():
             setattr(new_data_holder, prop, getattr(data_holder, prop))
-        
-        dataset = load_from_jsonl(DataHolder.get_dataset_path(name, dir=dir))
+
+        dataset = load_from_jsonl(
+            DataHolder.get_dataset_path(name, dir=dir),
+            only_retain_keys=["prompt", "completion"]
+        )
+
         new_data_holder.dataset = dataset
         # the above allows overriding the pickled file with manual .jsonl changes
         
@@ -196,6 +201,31 @@ class DataHolder:
         NOTE: in general, you should use the .save() method instead of this method.
         """
         write_to_jsonl(self.dataset, filepath)
+        if os.path.exists(filepath):
+            extra_info = [
+                {
+                    key : value for key, value in entry.items()
+                    if key not in ["prompt", "completion"]
+                }
+                for entry in load_from_jsonl(filepath)
+            ]
+        else:
+            # make dummy bc file doesn't exist yet
+            extra_info = [{} for _ in self.dataset]
+        # When we load, we throw out all information in the dataset
+        # except for the prompt and the completion.
+        # (this is because of annoying limitations in OpenAI's finetuning API)
+        # However, we don't want to throw out anything extra the user has added
+        # (in particular, if the user has imported another jsonl file and
+        # expects finetuna to have preserved any other attributes in it) when we
+        # then save the dataset again.
+        # (This is also enforced in openai_finetune_upload in finetune.py,
+        # but managing here too because cleaner to enforce that dataholder.dataset
+        # only contains prompt and completion)
+        merged = deepcopy(self.dataset)
+        for entry, extra in zip(merged, extra_info):
+            entry.update(extra)
+        write_to_jsonl(merged, filepath)
     
     def print_sample(self, n=10):
         """
@@ -386,29 +416,7 @@ class DataGenerator(DataHolder):
         self.prompt_gen_fn = prompt_gen_fn
         self.completion_gen_fn = completion_gen_fn
         self.latent_state_gen_fn = latent_state_gen_fn
-   
-    @staticmethod
-    def load(name : str, dir=None) -> 'DataGenerator':
-        with open(DataHolder.get_data_holder_path(name, dir=dir), "rb") as f:
-            data_generator = dill.load(f)
-        
-        # in case the class definition has changed, we load into a new copy:
-        new_data_generator = DataGenerator(
-            data_generator.prompt_gen_fn,
-            data_generator.completion_gen_fn,
-            data_generator.latent_state_gen_fn,
-            data_generator.name
-        )
-        for prop in data_generator.__dict__.keys():
-            setattr(new_data_generator, prop, getattr(data_generator, prop))
-        
-        dataset = load_from_jsonl(DataHolder.get_dataset_path(name, dir=dir))
-        new_data_generator.dataset = dataset
-        # the above allows overriding the pickled file with manual .jsonl changes
-        
-        assert len(data_generator.dataset) == len(data_generator.latent_states), "Dataset and latent states must be the same length."
-        return new_data_generator
-   
+    
     def generate(self, n=10):
         """
         Generate n samples of data.

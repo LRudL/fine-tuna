@@ -8,8 +8,8 @@ import jsonlines
 from dotenv import load_dotenv
 load_dotenv("../.env")
 
-from finetuna.utils import timestr, dataclass_to_dict, copy_file, dict_without_nones
-from finetuna.consts import OPENAI_API_KEY, FINETUNES_PATH
+from finetuna.utils import timestr, dataclass_to_dict, copy_file, dict_without_nones, write_to_jsonl
+from finetuna.consts import OPENAI_API_KEY, FINETUNES_PATH, DATA_PATH
 from finetuna.datagen.gen import DataHolder
 
 openai.api_key = OPENAI_API_KEY
@@ -30,11 +30,26 @@ def openai_finetune_file_upload(datagen : Union[DataHolder, str]):
     """
     if isinstance(datagen, str):
         jsonl_filepath = datagen
+        upload_response = openai.File.create(
+            file=open(jsonl_filepath, "rb"), purpose="fine-tune"
+        )
     else:
-        jsonl_filepath = datagen.dataset_path()
-    upload_response = openai.File.create(
-        file=open(jsonl_filepath, "rb"), purpose="fine-tune"
-    )
+        # assume it is a DataHolder
+        dataset = datagen.dataset
+        temp_filepath = f"{DATA_PATH}/tmp/{datagen.name}.jsonl"
+        # make sure the tmp directory exists:
+        if not os.path.exists(f"{DATA_PATH}/tmp"):
+            os.mkdir(f"{DATA_PATH}/tmp")
+        write_to_jsonl(
+            dataset,
+            temp_filepath,
+            only_keys=["prompt", "completion"]
+        )
+        upload_response = openai.File.create(
+            file=open(temp_filepath, "rb"), purpose="fine-tune"
+        )
+        # delete file:
+        os.remove(temp_filepath)
     file_id = upload_response.id # type: ignore
     return file_id
 
